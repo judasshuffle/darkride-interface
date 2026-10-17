@@ -1281,7 +1281,13 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer, bo
             return myAvatar ? myAvatar->getOrientationForAudio() : Quaternions::IDENTITY;
         });
 
-        recording::Frame::registerFrameHandler(AudioConstants::getAudioFrameName(), [&audioIO](recording::Frame::ConstPointer frame) {
+        recording::Frame::registerFrameHandler(AudioConstants::getAudioFrameName(), [audioIO](recording::Frame::ConstPointer frame) {
+            static thread_local QElapsedTimer diagnosticTimer;
+            if (!diagnosticTimer.isValid() || diagnosticTimer.elapsed() >= 5000) {
+                diagnosticTimer.start();
+                qCDebug(interfaceapp) << "[HFR audio] Application frame received; bytes:" << frame->data.size()
+                                     << "forwarding to AudioClient";
+            }
             audioIO->handleRecordedAudioInput(frame->data);
         });
 

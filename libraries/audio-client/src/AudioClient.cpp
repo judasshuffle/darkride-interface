@@ -1358,12 +1358,13 @@ void AudioClient::handleLocalEchoAndReverb(QByteArray& inputByteArray) {
     }
 }
 
-void AudioClient::handleAudioInput(QByteArray& audioBuffer) {
+void AudioClient::handleAudioInput(QByteArray& audioBuffer, bool isRecorded) {
     if (!_audioPaused) {
 
-        bool audioGateOpen = false;
+        // Recorded PCM bypasses live microphone mute/gating without changing their settings.
+        bool audioGateOpen = isRecorded;
 
-        if (!_muted) {
+        if (!_muted && !isRecorded) {
             int16_t* samples = reinterpret_cast<int16_t*>(audioBuffer.data());
             int numSamples = audioBuffer.size() / AudioConstants::SAMPLE_SIZE;
             int numFrames = numSamples / (_isStereoInput ? AudioConstants::STEREO : AudioConstants::MONO);
@@ -1374,27 +1375,33 @@ void AudioClient::handleAudioInput(QByteArray& audioBuffer) {
             } else {
                 audioGateOpen = _audioGate->removeDC(samples, samples, numFrames);
             }
+        }
 
+        if (!_muted) {
             emit inputReceived(audioBuffer);
         }
 
-        // loudness after mute/gate
-        _lastInputLoudness = (_muted || !audioGateOpen) ? 0.0f : _lastRawInputLoudness;
+        bool closedInLastBlock = false;
+        if (!isRecorded) {
+            // loudness after mute/gate
+            _lastInputLoudness = (_muted || !audioGateOpen) ? 0.0f : _lastRawInputLoudness;
 
-        // detect gate opening and closing
-        bool openedInLastBlock = !_audioGateOpen && audioGateOpen;  // the gate just opened
-        bool closedInLastBlock = _audioGateOpen && !audioGateOpen;  // the gate just closed
-        _audioGateOpen = audioGateOpen;
+            // detect gate opening and closing; playback leaves live input state untouched
+            bool openedInLastBlock = !_audioGateOpen && audioGateOpen;  // the gate just opened
+            closedInLastBlock = _audioGateOpen && !audioGateOpen;  // the gate just closed
+            _audioGateOpen = audioGateOpen;
 
-        if (openedInLastBlock) {
-            emit noiseGateOpened();
-        } else if (closedInLastBlock) {
-            emit noiseGateClosed();
+            if (openedInLastBlock) {
+                emit noiseGateOpened();
+            } else if (closedInLastBlock) {
+                emit noiseGateClosed();
+            }
         }
 
         // the codec must be flushed to silence before sending silent packets,
         // so delay the transition to silent packets by one packet after becoming silent.
-        auto packetType = _shouldEchoToServer ? PacketType::MicrophoneAudioWithEcho : PacketType::MicrophoneAudioNoEcho;
+        auto packetType = (_shouldEchoToServer || _isPlayingBackRecording)
+            ? PacketType::MicrophoneAudioWithEcho : PacketType::MicrophoneAudioNoEcho;
         if (!audioGateOpen && !closedInLastBlock) {
             packetType = PacketType::SilentAudioFrame;
             _silentOutbound.increment();
@@ -1508,8 +1515,30 @@ void AudioClient::handleDummyAudioInput() {
 }
 
 void AudioClient::handleRecordedAudioInput(const QByteArray& audio) {
+    static thread_local QElapsedTimer diagnosticTimer;
+    const bool logDiagnostic = !diagnosticTimer.isValid() || diagnosticTimer.elapsed() >= 5000;
+    const auto sequenceBefore = _outgoingAvatarAudioSequenceNumber;
+    if (logDiagnostic) {
+        diagnosticTimer.start();
+        qCDebug(audioclient) << "[HFR audio] AudioClient frame received; bytes:" << audio.size()
+                            << "paused:" << _audioPaused << "muted:" << _muted
+                            << "noiseGateEnabled:" << _isNoiseGateEnabled << "stereo:" << _isStereoInput;
+    }
     QByteArray audioBuffer(audio);
-    handleAudioInput(audioBuffer);
+    handleAudioInput(audioBuffer, true);
+    if (logDiagnostic) {
+        const auto audioMixer = DependencyManager::get<NodeList>()->soloNodeOfType(NodeType::AudioMixer);
+        // emitAudioPacket advances the sequence only on its active-mixer send path;
+        // this indicates submission, not confirmed receipt or audible output.
+        qCDebug(audioclient) << "[HFR audio] AudioClient result; paused:" << _audioPaused
+                            << "gateOpen:" << _audioGateOpen << "serverEcho:" << _shouldEchoToServer
+                            << "effectiveServerEcho:" << (_shouldEchoToServer || _isPlayingBackRecording)
+                            << "mixerPresent:" << bool(audioMixer)
+                            << "mixerActive:" << bool(audioMixer && audioMixer->getActiveSocket())
+                            << "packetSubmitted:" << (sequenceBefore != _outgoingAvatarAudioSequenceNumber)
+                            << "liveInputProcessingBypassed:" << true
+                            << "silentPacketSelected:" << false; // recorded input bypasses silent-packet selection
+    }
 }
 
 void AudioClient::prepareLocalAudioInjectors(std::unique_ptr<Lock> localAudioLock) {

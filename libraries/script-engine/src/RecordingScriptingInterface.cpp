@@ -9,6 +9,7 @@
 #include "RecordingScriptingInterface.h"
 
 #include <QStandardPaths>
+#include <QtCore/QSaveFile>
 #include <QtCore/QThread>
 #include <QtCore/QUrl>
 #include <QtScript/QScriptValue>
@@ -26,6 +27,7 @@
 #include <recording/Clip.h>
 #include <recording/Frame.h>
 #include <recording/ClipCache.h>
+#include "ScriptEngine.h"
 
 #include "ScriptEngineLogging.h"
 
@@ -246,6 +248,60 @@ void RecordingScriptingInterface::saveRecording(const QString& filename) {
     }
 
     recording::Clip::toFile(filename, _lastClip);
+}
+
+bool RecordingScriptingInterface::saveRecordingWithData(const QString& filename, QScriptValue callback) {
+    if (QThread::currentThread() != thread()) {
+        bool result;
+        BLOCKING_INVOKE_METHOD(this, "saveRecordingWithData",
+            Q_RETURN_ARG(bool, result),
+            Q_ARG(QString, filename),
+            Q_ARG(QScriptValue, callback));
+        return result;
+    }
+
+    auto finish = [callback, filename](const QString& error, const QByteArray& data) mutable {
+        if (!callback.isFunction()) {
+            return;
+        }
+
+        QScriptValueList args;
+        args << error;
+        if (error.isEmpty()) {
+            auto scriptEngine = qobject_cast<ScriptEngine*>(callback.engine());
+            if (!scriptEngine) {
+                QScriptValueList errorArgs { "Unable to access the script engine for binary recording data" };
+                callback.call(QScriptValue(), errorArgs);
+                return;
+            }
+            QScriptValue result = callback.engine()->newObject();
+            result.setProperty("filename", filename);
+            result.setProperty("data", scriptEngine->getArrayBufferClass()->newInstance(data));
+            result.setProperty("byteLength", data.size());
+            args << result;
+        }
+        callback.call(QScriptValue(), args);
+    };
+
+    if (!_lastClip) {
+        finish("There is no recording to save", {});
+        return false;
+    }
+
+    const QByteArray data = recording::Clip::toBuffer(_lastClip);
+    if (data.isEmpty()) {
+        finish("The recording serialized to an empty file", {});
+        return false;
+    }
+
+    QSaveFile outputFile(filename);
+    if (!outputFile.open(QIODevice::WriteOnly) || outputFile.write(data) != data.size() || !outputFile.commit()) {
+        finish(outputFile.errorString(), {});
+        return false;
+    }
+
+    finish({}, data);
+    return true;
 }
 
 bool RecordingScriptingInterface::saveRecordingToAsset(QScriptValue getClipAtpUrl) {

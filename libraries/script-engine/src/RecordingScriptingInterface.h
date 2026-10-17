@@ -290,6 +290,21 @@ public slots:
     void saveRecording(const QString& filename);
 
     /**jsdoc
+     * Saves the most recently made recording and returns the exact saved HFR bytes.
+     * @function Recording.saveRecordingWithData
+     * @param {string} filename - The path and name of the HFR file to save.
+     * @param {Recording~saveRecordingWithDataCallback} callback - Called with an error string and the saved file data.
+     * @returns {boolean} Whether the save was started and completed successfully.
+     */
+    bool saveRecordingWithData(const QString& filename, QScriptValue callback);
+
+    /**jsdoc
+     * @callback Recording~saveRecordingWithDataCallback
+     * @param {string} error - Empty when successful; otherwise describes the save failure.
+     * @param {object} result - On success, contains filename, binary data as an ArrayBuffer, and byteLength.
+     */
+
+    /**jsdoc
      * Called when a {@link Recording.saveRecordingToAsset} call is complete.
      * @callback Recording~saveRecordingToAssetCallback
      * @param {string} url - The URL of the recording stored in the asset server if successful, <code>""</code> if 

@@ -315,7 +315,7 @@ private:
     void checkPeakValues();
 
     void outputFormatChanged();
-    void handleAudioInput(QByteArray& audioBuffer);
+    void handleAudioInput(QByteArray& audioBuffer, bool isRecorded = false);
     void prepareLocalAudioInjectors(std::unique_ptr<Lock> localAudioLock = nullptr);
     bool mixLocalAudioInjectors(float* mixBuffer);
     float azimuthForSource(const glm::vec3& relativePosition);
