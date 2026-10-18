@@ -1,5 +1,35 @@
 # ROBOTDOLLY Parallax v4
 
+## Quick start — webcam and octopus edition 🐙
+
+**This is an experimental source-code branch, not a downloadable installer.** Build the `interface` viewer from this branch (or use a locally compiled build). Ordinary DarkRide does not include the native Parallax menu yet.
+
+You need:
+- A webcam.
+- [OpenTrack](https://github.com/opentrack/opentrack/releases/latest) with its **NeuralNet tracker** input.
+- Python 3 with the `websockets` package.
+- The [ROBOTDOLLY local bridge](https://github.com/judasshuffle/hifi-content/blob/master/robotdolly-parallax/opentrack_bridge.py) saved as `opentrack_bridge.py`.
+- DarkRide built from this Parallax v4 branch.
+
+**On Windows (tested setup):**
+
+1. Open OpenTrack, select **NeuralNet tracker** as Input, choose your webcam, and select **UDP over network** as Output.
+2. Open the Output settings and set **IP/host `127.0.0.1`**, **port `4242`**. Start tracking; the octopus preview should respond to your movements.
+3. Install the Python dependency: `py -m pip install "websockets>=11"`.
+4. Open PowerShell in the folder containing the bridge, then run `py opentrack_bridge.py`. **Leave it running** while using Parallax. When the viewer connects, the bridge should report `viewers=1`.
+5. Start the modified DarkRide viewer. **Stop older ROBOTDOLLY Parallax JavaScript scripts** so they do not fight the native camera.
+6. Switch to **first-person desktop mode**. Go to **Settings → ROBOTDOLLY Parallax v4 → Parallax ON**.
+7. Look straight ahead and choose **Recalibrate parallax**. Move your head side to side to peek around scenery.
+8. If sideways movement feels reversed, in OpenTrack go to **Options → Output** and enable **Post-invert for X**. This corrected left/right motion on the original Windows test setup; other webcam setups may differ.
+9. Adjust **Parallax sensitivity and smoothing** if needed. Settings are not persisted across sessions. To stop the effect, choose **Parallax OFF**; stopping the bridge also returns the view to normal.
+
+**Troubleshooting:** If the bridge shows `viewers=0`, the viewer has not connected. If it shows `viewers=1` but there is no movement, check **Parallax ON**, first-person view, calibration, and whether the X/Y/Z values in the bridge output actually change. Third-person and VR deliberately bypass the effect. OpenTrack's **Mirror** preview checkbox is not the same as output axis inversion.
+
+**Privacy:** The webcam video stays within your local tracker. The helper sends *numerical head-position values only* over localhost (`127.0.0.1`), not webcam footage. No external transmission is part of this feature.
+
+---
+
+
 Project credit: Judas.
 
 Experimental desktop first-person camera translation. Settings > ROBOTDOLLY Parallax v4 offers ON, OFF, recalibration, sensitivity (0–5) and smoothing (0–500 ms). Defaults: OFF, sensitivity 1, smoothing 80 ms. Settings are session-only.
