@@ -2770,6 +2770,8 @@ void Application::updateHeartbeat() const {
 }
 
 void Application::onAboutToQuit() {
+    // Release webcam and join inference while Qt and its multimedia service still exist.
+    _desktopParallax.setEnabled(false);
     setCrashAnnotation("shutdown", "1");
 
     // quickly save AvatarEntityData before the EntityTree is dismantled

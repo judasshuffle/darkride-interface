@@ -1,0 +1,31 @@
+# Native parallax uses a separately supplied OpenCV SDK; no runtime downloads.
+# Windows: tools/setup-native-camera.ps1 installs the pinned SDK in the build tree.
+set(NATIVE_CAMERA_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
+function(target_native_camera target)
+    if(NOT OpenCV_DIR AND EXISTS "${NATIVE_CAMERA_SOURCE_ROOT}/build/native-camera-deps/opencv/build/OpenCVConfig.cmake")
+        set(OpenCV_DIR "${NATIVE_CAMERA_SOURCE_ROOT}/build/native-camera-deps/opencv/build")
+    endif()
+    find_package(OpenCV 4.10 REQUIRED COMPONENTS core imgproc dnn calib3d objdetect)
+    target_include_directories(${target} SYSTEM PRIVATE ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(${target} ${OpenCV_LIBS} Qt5::Multimedia)
+    set(models "${NATIVE_CAMERA_SOURCE_ROOT}/interface/external/native-camera/models")
+    foreach(model face_detection_yunet_2023mar.onnx face_mesh_Nx3x192x192.onnx canonical_face_model.obj)
+        if(NOT EXISTS "${models}/${model}")
+            message(FATAL_ERROR "Missing native parallax model: ${models}/${model}")
+        endif()
+    endforeach()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${models}" "$<TARGET_FILE_DIR:${target}>/parallax-models")
+    if(WIN32)
+        foreach(lib ${OpenCV_LIBS})
+            get_target_property(kind ${lib} TYPE)
+            if(kind STREQUAL "SHARED_LIBRARY")
+                add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${lib}>" "$<TARGET_FILE_DIR:${target}>")
+                install(FILES "$<TARGET_FILE:${lib}>" DESTINATION . COMPONENT ${CLIENT_COMPONENT})
+            endif()
+        endforeach()
+    endif()
+    install(DIRECTORY "${models}/" DESTINATION parallax-models COMPONENT ${CLIENT_COMPONENT})
+endfunction()
+

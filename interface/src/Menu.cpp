@@ -332,14 +332,14 @@ Menu::Menu() {
     MenuWrapper* settingsMenu = addMenu("Settings");
 
     // Session-only controls: tracking always starts OFF, even after settings reload.
-    auto parallaxMenu = settingsMenu->addMenu("ROBOTDOLLY Parallax v4");
+    auto parallaxMenu = settingsMenu->addMenu("ROBOTDOLLY Parallax v5");
     auto parallaxOn = addActionToQMenuAndActionHash(parallaxMenu, "Parallax ON");
     connect(parallaxOn, &QAction::triggered, [] { qApp->getDesktopParallax().setEnabled(true); });
     auto parallaxOff = addActionToQMenuAndActionHash(parallaxMenu, "Parallax OFF");
     connect(parallaxOff, &QAction::triggered, [] { qApp->getDesktopParallax().setEnabled(false); });
     auto parallaxCenter = addActionToQMenuAndActionHash(parallaxMenu, "Recalibrate parallax");
     connect(parallaxCenter, &QAction::triggered, [] { qApp->getDesktopParallax().recalibrate(); });
-    auto parallaxSettings = addActionToQMenuAndActionHash(parallaxMenu, "Parallax sensitivity and smoothing...");
+    auto parallaxSettings = addActionToQMenuAndActionHash(parallaxMenu, "Parallax camera, sensitivity and smoothing...");
     connect(parallaxSettings, &QAction::triggered, [] { qApp->getDesktopParallax().showSettings(); });
 
     // Settings > General...

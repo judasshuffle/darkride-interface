@@ -61,6 +61,8 @@ DerivedData
 
 # ignore interface optional externals
 interface/external/*/*
+!interface/external/native-camera/models/
+!interface/external/native-camera/models/**
 !interface/external/*/readme.txt
 
 # Ignore interfaceCache for Linux users

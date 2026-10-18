@@ -1,0 +1,33 @@
+ROBOTDOLLY Parallax v5 model provenance
+
+These assets are bundled for local, CPU-only inference. No runtime download occurs.
+
+face_detection_yunet_2023mar.onnx
+  OpenCV Zoo / YuNet, MIT license (LICENSE-YuNet.txt).
+  https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+  SHA256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+
+face_mesh_Nx3x192x192.onnx
+  Yakhyokhuja Valikhujaev's ONNX export of Google's MediaPipe Face Mesh.
+  Apache-2.0 (LICENSE-FaceMesh.txt and LICENSE-MediaPipe.txt).
+  https://github.com/yakhyo/mediapipe-face-mesh-onnx/releases/tag/weights
+  https://github.com/yakhyo/mediapipe-face-mesh-onnx/blob/main/models/onnx_model.py
+  SHA256 3ca77cf59c18e4da0eccb46695bf604683fa564253e3385892981a5c274fb10f
+  NCHW float32 RGB [0,1], 192 square, outputs landmarks [N,468,3] in crop
+  pixels and score (presence logit). ROI preprocessing follows the upstream
+  1.5x square eye-aligned crop. The C++ implementation is adapted from that
+  algorithm, Copyright 2026 Yakhyokhuja Valikhujaev, Apache-2.0.
+
+canonical_face_model.obj
+  Google MediaPipe canonical 468-vertex face, centimetres, Apache-2.0.
+  https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model.obj
+  SHA256 8bac80443397e113f41a8b565ea72c59390bc031d9defab289dba7bc0c54e618
+
+OpenCV 4.10.0 SDK (not included in source control)
+  https://github.com/opencv/opencv/releases/tag/4.10.0
+  Apache-2.0; its license is copied beside the viewer by the build.
+  Official Windows archive SHA256:
+  bff38466091c313dac21a0b73eea8278316a89c1d434c6f0b10697e087670168
+
+Assets retrieved 2026-10-18. Hashes identify the exact bundled files even if
+upstream release tags change. Do not substitute differently shaped ONNX exports.

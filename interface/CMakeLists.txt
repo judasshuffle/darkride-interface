@@ -292,6 +292,9 @@ target_link_libraries(
   ${PLATFORM_QT_LIBRARIES}
 )
 
+include(${CMAKE_SOURCE_DIR}/cmake/NativeCamera.cmake)
+target_native_camera(${TARGET_NAME})
+
 if (UNIX AND NOT ANDROID)
     if (CMAKE_SYSTEM_NAME MATCHES "Linux")
         # Linux

@@ -30,3 +30,5 @@
 cmake/ports/nvtt/fix-arm64-darwin.patch -text
 # shell scripts run in Linux containers, so they keep LF even in a Windows checkout
 *.sh text eol=lf
+interface/external/native-camera/models/*.onnx binary
+interface/external/native-camera/models/*.obj -text

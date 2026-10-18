@@ -1,106 +1,84 @@
-// ROBOTDOLLY Parallax v4 — Judas
-// Distributed under the Apache License, Version 2.0.
+// ROBOTDOLLY Parallax v5 — Judas. Apache-2.0.
 #include "DesktopParallax.h"
-
+#include <QCameraInfo>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
 #include <QFormLayout>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLabel>
 #include <QMutexLocker>
-#include <QNetworkProxy>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
 
 namespace {
 constexpr qint64 STALE_MS = 500;
 constexpr float MAX_TRANSLATION_METRES = 0.30f;
+qint64 now() { QElapsedTimer timer; timer.start(); return timer.msecsSinceReference(); }
 }
 
 DesktopParallax::DesktopParallax() {
-    _clock.start();
-    // Fixed loopback endpoint; never use a system proxy or transmit pose/image data.
-    _socket.setProxy(QNetworkProxy::NoProxy);
-    _socket.setMaxAllowedIncomingMessageSize(4096);
-    _socket.setMaxAllowedIncomingFrameSize(4096);
-    connect(&_socket, &QWebSocket::textMessageReceived, this, &DesktopParallax::receive);
-    connect(&_socket, &QWebSocket::disconnected, this, [this] { resetPose(); });
-    connect(&_retry, &QTimer::timeout, this, [this] {
-        bool enabled;
-        { QMutexLocker lock(&_mutex); enabled = _enabled; }
-        if (enabled && _socket.state() == QAbstractSocket::UnconnectedState) {
-            _socket.open(QUrl(QStringLiteral("ws://127.0.0.1:8765")));
-        }
-    });
-    _retry.setInterval(1000);
+    connect(&_tracker, &NativeCameraTracker::poseReady, this, &DesktopParallax::receive);
+    connect(&_tracker, &NativeCameraTracker::statusChanged, this, [this](const QString& status) { _status = status; });
 }
+DesktopParallax::~DesktopParallax() { _tracker.stop(); }
 
 void DesktopParallax::resetPose() {
     QMutexLocker lock(&_mutex);
     _calibrated = false;
+    _neutralSamples = 0;
     _lastPose = -1;
+    _acceptAfter = now();
     _filtered = glm::vec3(0.0f);
 }
 
 void DesktopParallax::setEnabled(bool enabled) {
     { QMutexLocker lock(&_mutex); _enabled = enabled; }
     resetPose();
-    if (enabled) {
-        _retry.start();
-        if (_socket.state() == QAbstractSocket::UnconnectedState) {
-            _socket.open(QUrl(QStringLiteral("ws://127.0.0.1:8765")));
-        }
-    } else {
-        _retry.stop();
-        _socket.abort();
-    }
+    if (enabled) { _tracker.start(_device, _horizontalFov); }
+    else { _tracker.stop(); _status = "OFF — camera released."; }
 }
 
-void DesktopParallax::recalibrate() {
-    resetPose(); // The next valid sample becomes neutral.
-}
+void DesktopParallax::recalibrate() { resetPose(); }
 
-void DesktopParallax::receive(const QString& message) {
-    if (message.size() > 4096) { return; }
-    const auto document = QJsonDocument::fromJson(message.toUtf8());
-    if (!document.isObject()) { return; }
-    const auto object = document.object();
-    if (object.value("kind").toString() != "pose") { return; }
-    glm::vec3 position;
-    const char* axes[] = { "x", "y", "z" };
-    for (int i = 0; i < 3; ++i) {
-        const auto value = object.value(axes[i]);
-        if (!value.isDouble()) { return; }
-        const double cm = value.toDouble();
-        if (!std::isfinite(cm) || std::abs(cm) > 10000.0) { return; }
-        position[i] = static_cast<float>(cm * 0.01);
-    }
+void DesktopParallax::receive(float x, float y, float z, qint64 capturedAt) {
+    const glm::vec3 position(x, y, z);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || glm::length(position) > 3.0f) { return; }
     QMutexLocker lock(&_mutex);
-    if (!_enabled) { return; }
-    const auto now = _clock.elapsed();
-    if (!_calibrated || _lastPose < 0 || now - _lastPose > STALE_MS) {
-        _neutral = position;
+    const auto time = now();
+    if (!_enabled || capturedAt <= _acceptAfter || time - capturedAt > STALE_MS || capturedAt > time ||
+        (_lastPose >= 0 && capturedAt <= _lastPose)) { return; }
+    if (_lastPose < 0 || capturedAt - _lastPose > STALE_MS) {
+        _calibrated = false;
+        _neutralSamples = 0;
         _filtered = glm::vec3(0.0f);
-        _calibrated = true;
+    }
+    // Reject implausible jumps rather than driving the view to the safety clamp.
+    if (_calibrated && glm::length(position - _position) > .15f) { return; }
+    if (!_calibrated) {
+        if (_neutralSamples == 0 || glm::length(position - _neutral) > .015f) {
+            _neutral = position;
+            _neutralSamples = 1;
+        } else {
+            _neutral += (position - _neutral) / float(++_neutralSamples);
+        }
+        _calibrated = _neutralSamples >= 6;
     }
     _position = position;
-    _lastPose = now;
+    _lastPose = capturedAt;
 }
 
 glm::vec3 DesktopParallax::displayOffset(float deltaTime, bool compatible) {
     QMutexLocker lock(&_mutex);
-    if (!_enabled || !compatible || !_calibrated || _lastPose < 0 || _clock.elapsed() - _lastPose > STALE_MS) {
+    if (!_enabled || !compatible || !_calibrated || _lastPose < 0 || now() - _lastPose > STALE_MS) {
         _filtered = glm::vec3(0.0f);
         return _filtered;
     }
-    // Bridge coordinates: +X right, +Y up, +Z back, in centimetres.
     glm::vec3 target = (_position - _neutral) * _sensitivity;
     const float distance = glm::length(target);
-    if (distance > MAX_TRANSLATION_METRES) {
-        target *= MAX_TRANSLATION_METRES / distance;
-    }
+    if (distance > MAX_TRANSLATION_METRES) { target *= MAX_TRANSLATION_METRES / distance; }
     const float dt = std::isfinite(deltaTime) ? std::max(0.0f, std::min(deltaTime, 0.1f)) : 0.0f;
     const float alpha = _smoothingSeconds > 0.0f ? 1.0f - std::exp(-dt / _smoothingSeconds) : 1.0f;
     _filtered += alpha * (target - _filtered);
@@ -109,10 +87,38 @@ glm::vec3 DesktopParallax::displayOffset(float deltaTime, bool compatible) {
 
 void DesktopParallax::showSettings() {
     QDialog dialog;
-    dialog.setWindowTitle("ROBOTDOLLY Parallax v4 — Judas");
+    dialog.setWindowTitle("ROBOTDOLLY Parallax v5 — Native Camera — Judas");
     QFormLayout layout(&dialog);
-    QLabel description("Translation only. Local bridge: 127.0.0.1:8765\nFirst-person desktop modes. Maximum offset: 30 cm.");
+    QLabel description("Local webcam head tracking. Translation only; desktop first-person modes.\n"
+                       "Maximum offset: 30 cm. Hold still briefly to establish neutral.\n"
+                       "Distance is approximate; set your webcam's horizontal field of view if known.");
     layout.addRow(&description);
+    QLabel status(_status);
+    status.setWordWrap(true);
+    status.setMaximumWidth(600);
+    layout.addRow("Status", &status);
+    QTimer refresh;
+    connect(&refresh, &QTimer::timeout, &dialog, [&] {
+        QString text = _status;
+        { QMutexLocker lock(&_mutex);
+          if (_enabled && !_calibrated && _lastPose >= 0 && now() - _lastPose <= STALE_MS) {
+              text = "Hold still: establishing neutral...";
+          } }
+        status.setText(text);
+    });
+    refresh.start(250);
+    QComboBox camera;
+    camera.addItem("System default", QByteArray());
+    for (const auto& info : QCameraInfo::availableCameras()) { camera.addItem(info.description(), info.deviceName().toUtf8()); }
+    int selected = camera.findData(_device);
+    if (selected < 0) { camera.addItem("Selected camera (disconnected)", _device); selected = camera.count() - 1; }
+    camera.setCurrentIndex(selected);
+    layout.addRow("Webcam", &camera);
+    QDoubleSpinBox fov;
+    fov.setRange(30, 110);
+    fov.setSuffix(" degrees");
+    fov.setValue(_horizontalFov);
+    layout.addRow("Horizontal field of view", &fov);
     QDoubleSpinBox sensitivity;
     sensitivity.setRange(0.0, 5.0);
     sensitivity.setSingleStep(0.1);
@@ -129,8 +135,14 @@ void DesktopParallax::showSettings() {
     connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() == QDialog::Accepted) {
-        QMutexLocker lock(&_mutex);
-        _sensitivity = static_cast<float>(sensitivity.value());
-        _smoothingSeconds = static_cast<float>(smoothing.value() / 1000.0);
+        const bool restart = _device != camera.currentData().toByteArray() || _horizontalFov != fov.value();
+        _device = camera.currentData().toByteArray();
+        _horizontalFov = fov.value();
+        bool enabled;
+        { QMutexLocker lock(&_mutex);
+          _sensitivity = static_cast<float>(sensitivity.value());
+          _smoothingSeconds = static_cast<float>(smoothing.value() / 1000.0);
+          enabled = _enabled; }
+        if (restart && enabled) { setEnabled(true); }
     }
 }
