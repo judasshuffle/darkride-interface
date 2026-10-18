@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(ParallaxSmoke LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 14)
+find_package(Qt5 REQUIRED COMPONENTS Widgets WebSockets Network)
+find_path(GLM_INCLUDE_DIR glm/glm.hpp REQUIRED)
+add_executable(parallax-smoke main.cpp ../../interface/src/DesktopParallax.cpp)
+target_include_directories(parallax-smoke PRIVATE ../../interface/src ${GLM_INCLUDE_DIR})
+target_link_libraries(parallax-smoke PRIVATE Qt5::Widgets Qt5::WebSockets Qt5::Network)

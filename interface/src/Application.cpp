@@ -6988,7 +6988,17 @@ void Application::updateRenderArgs(float deltaTime) {
         }
 
         this->updateCamera(appRenderArgs._renderArgs, deltaTime);
-        appRenderArgs._eyeToWorld = _myCamera.getTransform();
+        // Compose a display-only translation after all normal camera/animation work.
+        // Never write this pose back to the avatar, input mapper or shared camera.
+        const auto cameraMode = _myCamera.getMode();
+        auto editor = DependencyManager::get<Editor>();
+        const bool parallaxCompatible = !isHMDMode() && !(editor && editor->isActive()) &&
+            (cameraMode == CAMERA_MODE_FIRST_PERSON || cameraMode == CAMERA_MODE_FIRST_PERSON_LOOK_AT);
+        const glm::vec3 parallaxOffset = _desktopParallax.displayOffset(deltaTime, parallaxCompatible);
+        const bool hasParallaxOffset = parallaxOffset != glm::vec3(0.0f);
+        const glm::vec3 displayCameraPosition = _myCamera.getPosition() + _myCamera.getOrientation() * parallaxOffset;
+        appRenderArgs._eyeToWorld = hasParallaxOffset ?
+            createMatFromQuatAndPos(_myCamera.getOrientation(), displayCameraPosition) : _myCamera.getTransform();
         appRenderArgs._isStereo = false;
 
         {
@@ -7046,6 +7056,10 @@ void Application::updateRenderArgs(float deltaTime) {
         {
             QMutexLocker viewLocker(&_viewMutex);
             _myCamera.loadViewFrustum(_displayViewFrustum);
+            if (hasParallaxOffset) {
+                _displayViewFrustum.setPosition(displayCameraPosition);
+                _displayViewFrustum.calculate();
+            }
             appRenderArgs._view = glm::inverse(_displayViewFrustum.getView());
         }
 
@@ -7271,7 +7285,8 @@ PickRay Application::computePickRay(float x, float y) const {
             pickPoint.x = 1.0f - pickPoint.x;
         }
         QMutexLocker viewLocker(&_viewMutex);
-        _viewFrustum.computePickRay(pickPoint.x, pickPoint.y, result.origin, result.direction);
+        // Pick against the same pose/projection used to draw and cull the desktop view.
+        _displayViewFrustum.computePickRay(pickPoint.x, pickPoint.y, result.origin, result.direction);
     }
     return result;
 }

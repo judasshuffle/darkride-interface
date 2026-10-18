@@ -53,6 +53,7 @@
 
 #include "avatar/MyAvatar.h"
 #include "FancyCamera.h"
+#include "DesktopParallax.h"
 #include "ConnectionMonitor.h"
 #include "CursorManager.h"
 #include "gpu/Context.h"
@@ -170,6 +171,7 @@ public:
 
     bool isThrottleRendering() const;
 
+    DesktopParallax& getDesktopParallax() { return _desktopParallax; }
     Camera& getCamera() { return _myCamera; }
     const Camera& getCamera() const { return _myCamera; }
     // Represents the current view frustum of the avatar.
@@ -698,6 +700,7 @@ private:
     SimpleMovingAverage _avatarSimsPerSecond{ 10 };
     int _avatarSimsPerSecondReport{ 0 };
     quint64 _lastAvatarSimsPerSecondUpdate{ 0 };
+    DesktopParallax _desktopParallax;
     FancyCamera _myCamera;  // My view onto the world
 
     Setting::Handle<QString> _previousScriptLocation;
