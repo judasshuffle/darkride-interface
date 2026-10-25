@@ -23,7 +23,8 @@ ARG SOURCE_REVISION=unknown
 ENV TIVOLI_VCPKG_BASE=/vcpkg RELEASE_TYPE=PRODUCTION RELEASE_NUMBER=1.1-beta WASI_SDK=/opt/wasi-sdk
 COPY . /src
 # Only the Linux container's source copy is patched, never the Windows working tree.
-RUN cd /src && patch --batch --fuzz=0 -p1 < docker/synology/linux-build.patch
+RUN cd /src && patch --batch --fuzz=0 -p1 < docker/synology/linux-build.patch \
+    && patch --batch --fuzz=0 -p1 < docker/synology/vcpkg-bootstrap-cstdint.patch
 RUN sh /src/tools/wasm-js/build.sh || { status=$?; \
     cat /src/tools/wasm-js/build/quickjs-configure.log /src/tools/wasm-js/build/quickjs-build.log 2>/dev/null || true; \
     exit "$status"; }

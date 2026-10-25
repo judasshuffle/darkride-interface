@@ -1,0 +1,16 @@
+--- a/hifi_vcpkg.py
++++ b/hifi_vcpkg.py
+@@ -493,7 +493,12 @@
+                 hifi_utils.executeSubprocess(["chmod", "+x", os.path.join(self.path, "bootstrap-vcpkg.sh")])
+
+                 print("Bootstrapping vcpkg")
+-                hifi_utils.executeSubprocess(self.bootstrapCmds, folder=self.path, env=self.bootstrapEnv)
++                # The pinned 2021 tool uses std::uint64_t without including <cstdint>.
++                # Scope the GCC 13 compatibility include to bootstrap, not port/server builds.
++                bootstrap_env = self.bootstrapEnv.copy()
++                if platform.system() == "Linux" and self.vcpkgVersion == "2021.05.12":
++                    bootstrap_env["CXXFLAGS"] = (bootstrap_env.get("CXXFLAGS", "") + " -include cstdint").strip()
++                hifi_utils.executeSubprocess(self.bootstrapCmds, folder=self.path, env=bootstrap_env)
+
+         print("Replacing port files")
+         portsPath = os.path.join(self.path, 'ports')

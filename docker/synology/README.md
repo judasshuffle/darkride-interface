@@ -19,6 +19,15 @@ The Docker build applies `linux-build.patch` inside its source copy: distro Qt h
 discovery, shared-library private Qt headers, and the Overte mirror of the existing
 WebRTC archive with its original checksum. No host source/build files are patched.
 It retains vcpkg 2021.05.12 and the repository's Wasmtime 49.0.3 integration.
+`vcpkg-bootstrap-cstdint.patch` fixes the first CI failure (run 40238623267):
+the pinned tool's `strings.h:301` uses `std::uint64_t` without `<cstdint>` under
+GCC 13.3.0. The container-only patch adds `-include cstdint` to a copy of
+`CXXFLAGS` used only for Linux vcpkg 2021.05.12 bootstrap. Existing flags are
+preserved; port/server build environments, the compiler and vcpkg pin are unchanged.
+Run `python docker/synology/check-vcpkg-bootstrap.py` to validate patch application
+and bootstrap flag isolation without downloading or building dependencies.
+This local check does not establish successful GCC 13 compilation; that requires
+the next separately approved CI build.
 The JavaScript guest is built by the existing `tools/wasm-js/build.sh`, with WASI SDK
 34.0 pinned by its GitHub release SHA-256. Packaging requires that guest and checks
 runtime shared-library resolution. ICE is not built. Six assignment workers run;
