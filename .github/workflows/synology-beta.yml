@@ -1,0 +1,57 @@
+name: DarkRide 1.1 Synology beta (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: synology-beta-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'judasshuffle/darkride-interface' && github.ref == 'refs/heads/server/synology-1.1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate source before building
+        shell: bash
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          git apply --check docker/synology/linux-build.patch
+          bash -n docker/synology/run-server.sh
+          sh -n docker/synology/install-server.sh
+      - name: Record source and beta image
+        id: revision
+        shell: bash
+        run: |
+          set -eu
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/judasshuffle/robotdolly-darkride-server:1.1-beta-$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish beta only
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/synology/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.revision.outputs.image }}
+          build-args: |
+            SOURCE_REVISION=${{ steps.revision.outputs.sha }}
+            BUILD_JOBS=2
+          provenance: false
+      - name: Record immutable deployment reference
+        run: |
+          echo '${{ steps.revision.outputs.image }}' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Digest: ${{ steps.build.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
