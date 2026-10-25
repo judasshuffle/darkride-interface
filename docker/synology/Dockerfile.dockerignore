@@ -1,0 +1,17 @@
+**/.git
+**/.env
+**/.env.*
+**/*.bak
+**/build
+**/build-*
+**/node_modules
+**/__pycache__
+**/.aws
+**/.codex
+**/.agents
+**/vcpkg
+**/data
+**/my-world
+**/*.log
+**/*.pem
+**/*.key
