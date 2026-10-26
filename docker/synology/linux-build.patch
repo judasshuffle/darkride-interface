@@ -56,7 +56,7 @@
      )
 --- a/cmake/ports/tbb/portfile.cmake
 +++ b/cmake/ports/tbb/portfile.cmake
-@@ -12,6 +12,17 @@
+@@ -12,5 +12,16 @@
          terminate-when-buildtool-notfound.patch
  )
  
@@ -73,7 +73,7 @@
 +endif()
  file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
  
-@@ -133,6 +144,12 @@
+@@ -133,4 +144,10 @@
  )
  
 +# The release-only vcpkg triplet has no debug archives.
