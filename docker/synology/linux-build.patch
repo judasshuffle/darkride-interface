@@ -87,3 +87,14 @@
  file(WRITE ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake "${_contents}")
  
  file(COPY ${CMAKE_CURRENT_LIST_DIR}/usage DESTINATION ${CURRENT_PACKAGES_DIR}/share/tbb)
+--- a/libraries/shared/src/CPUIdent.h
++++ b/libraries/shared/src/CPUIdent.h
+@@ -21,7 +21,8 @@
+ #include <vector>
+ #include <bitset>
+ #include <array>
++#include <cstdint>
+ #include <string>
+ 
+ class CPUIdent
+ {
