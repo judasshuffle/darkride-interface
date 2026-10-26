@@ -60,37 +60,26 @@
          terminate-when-buildtool-notfound.patch
  )
  
-+# GCC 13 rejects an old oneTBB task member's unqualified type name.
-+# Qualify it in this container-only build, without changing the pinned TBB.
++# GCC 13 requires the old TBB member's task type to be qualified.
++# Limit this change to the isolated Linux container.
 +if(VCPKG_TARGET_IS_LINUX)
 +    set(_task_header "${SOURCE_PATH}/include/tbb/task.h")
 +    file(READ "${_task_header}" _task_source)
 +    string(REPLACE "task* next_offloaded;" "tbb::task* next_offloaded;" _task_fixed "${_task_source}")
 +    if(_task_fixed STREQUAL _task_source)
-+        message(FATAL_ERROR "Pinned TBB task declaration changed; review GCC compatibility fix")
++        message(FATAL_ERROR "Pinned TBB task declaration changed")
 +    endif()
 +    file(WRITE "${_task_header}" "${_task_fixed}")
 +endif()
  file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
  
-@@ -112,6 +123,13 @@
- set(TBB_RELEASE_DIR "\${_tbb_root}/lib")
- set(TBB_DEBUG_DIR "\${_tbb_root}/debug/lib")
- 
-+# The release-only triplet has no debug archives. Point the generated
-+# import configuration at the existing release archives instead.
-+if(VCPKG_BUILD_TYPE STREQUAL "release")
-+    set(TBB_DEBUG_DIR "\${_tbb_root}/lib")
-+endif()
-+
- configure_file(
-     ${SOURCE_PATH}/cmake/templates/TBBConfigInternal.cmake.in
-@@ -133,6 +151,11 @@
+@@ -133,6 +144,12 @@
  )
  
-+# The pinned template names debug archives with a _debug suffix.
-+# Release-only packages do not contain these archives.
++# The release-only vcpkg triplet has no debug archives.
++# Make the generated import config use release archives for both.
 +if(VCPKG_BUILD_TYPE STREQUAL "release")
++    string(REPLACE "/debug/lib/" "/lib/" _contents "${_contents}")
 +    string(REPLACE "_debug.a" ".a" _contents "${_contents}")
 +endif()
  string(REPLACE "SHARED IMPORTED)" "UNKNOWN IMPORTED)" _contents "${_contents}")
