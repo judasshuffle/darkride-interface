@@ -898,8 +898,14 @@ void LimitedNodeList::removeSilentNodes() {
         SharedNodePointer node = it->second;
         node->getMutex().lock();
 
+        // Packet reception updates this atomic timestamp on another thread. Read it
+        // before sampling now, and guard against the wall clock stepping backwards:
+        // unsigned subtraction would otherwise make a live node appear silent.
+        const auto lastHeard = node->getLastHeardMicrostamp();
+        const auto now = usecTimestampNow();
         if (!node->isForcedNeverSilent()
-            && (usecTimestampNow() - node->getLastHeardMicrostamp()) > (NODE_SILENCE_THRESHOLD_MSECS * USECS_PER_MSEC)) {
+            && now > lastHeard
+            && (now - lastHeard) > (NODE_SILENCE_THRESHOLD_MSECS * USECS_PER_MSEC)) {
             // call the NodeHash erase to get rid of this node
             _localIDMap.unsafe_erase(node->getLocalID());
             it = _nodeHash.unsafe_erase(it);
