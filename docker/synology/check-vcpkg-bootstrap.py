@@ -77,22 +77,40 @@ print("PASS: other versions/platforms and port/server environments unchanged")
 import shutil
 method = next(n for n in repo.body if isinstance(n, ast.FunctionDef) and n.name == "copyTripletForBuildType")
 code = compile(ast.Module(body=[method], type_ignores=[]), "hifi_vcpkg.py", "exec")
+import sys
+cmake = sys.argv[1] if len(sys.argv) > 1 else shutil.which("cmake")
+if not cmake:
+    raise SystemExit("Pass the path to cmake to validate generated triplets")
 for system, version in [("Linux", "2021.05.12"), ("Linux", "other"), ("Windows", "2021.05.12"), ("Darwin", "2021.05.12")]:
-    with tempfile.TemporaryDirectory() as directory:
-        triplets = Path(directory) / "triplets"
-        triplets.mkdir()
-        original = 'set(VCPKG_CXX_FLAGS "-DKEEP=1")\nset(VCPKG_C_FLAGS "-DKEEP_C=1")\n'
-        (triplets / "test.cmake").write_text(original)
-        state = SimpleNamespace(path=directory, vcpkgBuildType="release", vcpkgVersion=version,
-                                getTripletWithBuildType=lambda t: t + "-release")
-        scope = {"os": os, "shutil": shutil, "platform": SimpleNamespace(system=lambda: system),
-                 "print": lambda *a: None}
-        exec(code, scope)
-        scope["copyTripletForBuildType"](state, "test")
-        result = (triplets / "test-release.cmake").read_text()
-        assert result.startswith(original)
-        assert ('string(APPEND VCPKG_CXX_FLAGS " -include cstdint")' in result) == (system == "Linux" and version == "2021.05.12")
-print("PASS: dependency triplet flag preservation and Linux/version isolation")
+    for existing in (False, True):
+        with tempfile.TemporaryDirectory() as directory:
+            triplets = Path(directory) / "triplets"
+            triplets.mkdir()
+            original = 'set(VCPKG_CXX_FLAGS "-DKEEP=1")\nset(VCPKG_C_FLAGS "-DKEEP_C=1")\n' if existing else ""
+            (triplets / "test.cmake").write_text(original)
+            state = SimpleNamespace(path=directory, vcpkgBuildType="release", vcpkgVersion=version,
+                                    getTripletWithBuildType=lambda t: t + "-release")
+            scope = {"os": os, "shutil": shutil, "platform": SimpleNamespace(system=lambda: system),
+                     "print": lambda *a: None}
+            exec(code, scope)
+            scope["copyTripletForBuildType"](state, "test")
+            result = (triplets / "test-release.cmake").read_text()
+            assert result.startswith(original)
+            patched = system == "Linux" and version == "2021.05.12"
+            expected_c = "-DKEEP_C=1" if existing else ""
+            expected_cxx = ("-DKEEP=1" if existing else "") + (" -include cstdint" if patched else "")
+            # Execute the exact flag-pair condition from vcpkg 2021.05.12.
+            checks = '\nif((NOT DEFINED VCPKG_CXX_FLAGS OR NOT DEFINED VCPKG_C_FLAGS) AND (DEFINED VCPKG_CXX_FLAGS OR DEFINED VCPKG_C_FLAGS))\n  message(FATAL_ERROR "Both flags must be set")\nendif()\n'
+            checks += f'if(NOT "${{VCPKG_C_FLAGS}}" STREQUAL "{expected_c}" OR NOT "${{VCPKG_CXX_FLAGS}}" STREQUAL "{expected_cxx}")\n  message(FATAL_ERROR "Unexpected flags")\nendif()\n'
+            script = Path(directory) / "check.cmake"
+            script.write_text(result + checks)
+            subprocess.run([cmake, "-P", str(script)], check=True)
+            if patched and not existing:
+                # Regression proof: the previous patch must fail this real CMake check.
+                script.write_text(result.replace('set(VCPKG_C_FLAGS "${VCPKG_C_FLAGS}")\n', '') + checks)
+                failed = subprocess.run([cmake, "-P", str(script)], capture_output=True, text=True)
+                assert failed.returncode != 0 and "Both flags must be set" in failed.stderr
+print("PASS: real CMake flag-pair regression, empty/existing flags, Linux/version isolation")
 
 with tempfile.TemporaryDirectory() as directory:
     log = Path(directory) / "install-assimp.log"

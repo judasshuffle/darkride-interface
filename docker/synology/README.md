@@ -209,3 +209,9 @@ context and final 60 lines of the ten newest logs under /vcpkg and /build before
 exiting with the original failure status. This exposes dependency diagnostics in
 Actions without needing access to the discarded container. A successful Linux
 compile still requires a separately approved manual build.
+
+Run 40304093879 exposed vcpkg's requirement that C and C++ flag variables both
+be defined. The ports patch now explicitly defines VCPKG_C_FLAGS while preserving
+its existing value (empty if unset). The local check executes CMake against empty
+and pre-populated triplets and verifies that the prior patch fails the same check.
+Pass a CMake executable path to check-vcpkg-bootstrap.py if it is not on PATH.
