@@ -56,19 +56,42 @@
      )
 --- a/cmake/ports/tbb/portfile.cmake
 +++ b/cmake/ports/tbb/portfile.cmake
-@@ -133,4 +133,15 @@
+@@ -12,6 +12,17 @@
+         terminate-when-buildtool-notfound.patch
  )
  
-+# The pinned TBB config expects debug archives even with release-only vcpkg.
-+# For release-only triplets, reuse each real release archive for the debug
-+# imported location. Leave normal (dual-config) builds untouched.
-+if(VCPKG_BUILD_TYPE STREQUAL "release")
-+    set(_before_tbb_config "${_contents}")
-+    string(REGEX REPLACE "set\\(_tbb_debug_lib [^\\n]*\\)"
-+        "set(_tbb_debug_lib \"\${_tbb_release_lib}\")" _contents "${_contents}")
-+    if(_contents STREQUAL _before_tbb_config)
-+        message(FATAL_ERROR "TBB debug import substitution did not match")
++# GCC 13 rejects an old oneTBB task member's unqualified type name.
++# Qualify it in this container-only build, without changing the pinned TBB.
++if(VCPKG_TARGET_IS_LINUX)
++    set(_task_header "${SOURCE_PATH}/include/tbb/task.h")
++    file(READ "${_task_header}" _task_source)
++    string(REPLACE "task* next_offloaded;" "tbb::task* next_offloaded;" _task_fixed "${_task_source}")
++    if(_task_fixed STREQUAL _task_source)
++        message(FATAL_ERROR "Pinned TBB task declaration changed; review GCC compatibility fix")
 +    endif()
++    file(WRITE "${_task_header}" "${_task_fixed}")
++endif()
+ file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+ 
+@@ -112,6 +123,13 @@
+ set(TBB_RELEASE_DIR "\${_tbb_root}/lib")
+ set(TBB_DEBUG_DIR "\${_tbb_root}/debug/lib")
+ 
++# The release-only triplet has no debug archives. Point the generated
++# import configuration at the existing release archives instead.
++if(VCPKG_BUILD_TYPE STREQUAL "release")
++    set(TBB_DEBUG_DIR "\${_tbb_root}/lib")
++endif()
++
+ configure_file(
+     ${SOURCE_PATH}/cmake/templates/TBBConfigInternal.cmake.in
+@@ -133,6 +151,11 @@
+ )
+ 
++# The pinned template names debug archives with a _debug suffix.
++# Release-only packages do not contain these archives.
++if(VCPKG_BUILD_TYPE STREQUAL "release")
++    string(REPLACE "_debug.a" ".a" _contents "${_contents}")
 +endif()
  string(REPLACE "SHARED IMPORTED)" "UNKNOWN IMPORTED)" _contents "${_contents}")
  file(WRITE ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake "${_contents}")
