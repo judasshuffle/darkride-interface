@@ -24,7 +24,8 @@ ENV TIVOLI_VCPKG_BASE=/vcpkg RELEASE_TYPE=PRODUCTION RELEASE_NUMBER=1.1-beta WAS
 COPY . /src
 # Only the Linux container's source copy is patched, never the Windows working tree.
 RUN cd /src && patch --batch --fuzz=0 -p1 < docker/synology/linux-build.patch \
-    && patch --batch --fuzz=0 -p1 < docker/synology/vcpkg-bootstrap-cstdint.patch
+    && patch --batch --fuzz=0 -p1 < docker/synology/vcpkg-bootstrap-cstdint.patch \
+    && patch --batch --fuzz=0 -p1 < docker/synology/vcpkg-ports-cstdint.patch
 RUN sh /src/tools/wasm-js/build.sh || { status=$?; \
     cat /src/tools/wasm-js/build/quickjs-configure.log /src/tools/wasm-js/build/quickjs-build.log 2>/dev/null || true; \
     exit "$status"; }
@@ -34,7 +35,9 @@ RUN --mount=type=cache,id=darkride-11-vcpkg,target=/vcpkg \
     cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DQT_CMAKE_PREFIX_PATH="/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/cmake" \
       -DSERVER_ONLY=ON -DBUILD_SERVER=ON -DBUILD_CLIENT=OFF \
-      -DBUILD_TESTS=OFF -DBUILD_TOOLS=OFF -DBUILD_INSTALLER=OFF; \
+      -DBUILD_TESTS=OFF -DBUILD_TOOLS=OFF -DBUILD_INSTALLER=OFF || { status=$?; \
+        python3 /src/docker/synology/show-build-errors.py /vcpkg /build || true; \
+        exit "$status"; }; \
     cmake --build /build --parallel "$BUILD_JOBS" --target domain-server assignment-client; \
     sh /src/docker/synology/install-server.sh /build /opt/darkride; \
     printf '%s\n' "$SOURCE_REVISION" > /opt/darkride/SOURCE_REVISION

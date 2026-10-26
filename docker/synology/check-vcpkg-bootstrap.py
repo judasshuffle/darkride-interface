@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory() as directory:
     source.write_bytes(subprocess.check_output(["git", "show", "HEAD:hifi_vcpkg.py"], cwd=ROOT))
     subprocess.run(["git", "apply", "--check", str(PATCH)], cwd=directory, check=True)
     subprocess.run(["git", "apply", str(PATCH)], cwd=directory, check=True)
+    subprocess.run(["git", "apply", str(HERE / "vcpkg-ports-cstdint.patch")], cwd=directory, check=True)
     tree = ast.parse(source.read_text())
     compile(tree, str(source), "exec")
 
@@ -71,3 +72,32 @@ for system, version, flags in [
     assert build_env == {"CXXFLAGS": "-DPORT_FLAGS=1"}
 print("PASS: patch application, Python syntax, pinned Linux bootstrap flags, existing flags preserved")
 print("PASS: other versions/platforms and port/server environments unchanged")
+
+# Exercise generation of real triplet files without touching the shared vcpkg tree.
+import shutil
+method = next(n for n in repo.body if isinstance(n, ast.FunctionDef) and n.name == "copyTripletForBuildType")
+code = compile(ast.Module(body=[method], type_ignores=[]), "hifi_vcpkg.py", "exec")
+for system, version in [("Linux", "2021.05.12"), ("Linux", "other"), ("Windows", "2021.05.12"), ("Darwin", "2021.05.12")]:
+    with tempfile.TemporaryDirectory() as directory:
+        triplets = Path(directory) / "triplets"
+        triplets.mkdir()
+        original = 'set(VCPKG_CXX_FLAGS "-DKEEP=1")\nset(VCPKG_C_FLAGS "-DKEEP_C=1")\n'
+        (triplets / "test.cmake").write_text(original)
+        state = SimpleNamespace(path=directory, vcpkgBuildType="release", vcpkgVersion=version,
+                                getTripletWithBuildType=lambda t: t + "-release")
+        scope = {"os": os, "shutil": shutil, "platform": SimpleNamespace(system=lambda: system),
+                 "print": lambda *a: None}
+        exec(code, scope)
+        scope["copyTripletForBuildType"](state, "test")
+        result = (triplets / "test-release.cmake").read_text()
+        assert result.startswith(original)
+        assert ('string(APPEND VCPKG_CXX_FLAGS " -include cstdint")' in result) == (system == "Linux" and version == "2021.05.12")
+print("PASS: dependency triplet flag preservation and Linux/version isolation")
+
+with tempfile.TemporaryDirectory() as directory:
+    log = Path(directory) / "install-assimp.log"
+    log.write_text("compiler: error: sample-first-error\n" + "ordinary output\n" * 200 + "final marker\n")
+    result = subprocess.check_output([__import__("sys").executable, str(HERE / "show-build-errors.py"), directory], text=True)
+    assert "sample-first-error" in result and "final marker" in result
+    assert len(result.splitlines()) < 100
+print("PASS: diagnostics retain early error and final output with bounded log lines")

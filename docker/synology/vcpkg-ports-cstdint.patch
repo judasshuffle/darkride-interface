@@ -1,0 +1,12 @@
+--- a/hifi_vcpkg.py
++++ b/hifi_vcpkg.py
+@@ -530,6 +530,9 @@
+
+         with open(tripletForBuildTypePath, "a") as tripletForBuildTypeFile:
+             tripletForBuildTypeFile.write("set(VCPKG_BUILD_TYPE " + self.vcpkgBuildType + ")\n")
++            # Adapted from Madders v2026.10.6: old Linux ports also need <cstdint>.
++            if platform.system() == "Linux" and self.vcpkgVersion == "2021.05.12":
++                tripletForBuildTypeFile.write('string(APPEND VCPKG_CXX_FLAGS " -include cstdint")\n')
+
+     def getTripletWithBuildType(self, triplet):
+         if not self.vcpkgBuildType:

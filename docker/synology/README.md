@@ -193,3 +193,19 @@ behaviour using temporary state. `git apply --check docker/synology/linux-build.
 checks the Linux patch without applying it. `bash -n` checks the two shell scripts.
 These do not establish Linux compilation, Compose-engine compatibility, runtime
 behaviour, NAS suitability or viewer protocol compatibility.
+
+## Follow-up to Assimp failure (run 40239218615)
+
+The bootstrap include fix passed CI; Draco and zlib built, then Assimp failed.
+The original run did not expose Assimp's compiler log, so its precise cause is
+unconfirmed. Madders' successful v2026.10.6 source
+`f5ce86141be993187959d9311c4175ab346fe667` also adds `-include cstdint` to Linux
+vcpkg dependency triplets. `vcpkg-ports-cstdint.patch` adapts that fix, retaining
+existing C++ flags and leaving C flags unchanged. It applies only inside the
+container, to Linux vcpkg 2021.05.12; no compiler or dependency upgrade is made.
+
+On configure/dependency failure, `show-build-errors.py` prints the first error
+context and final 60 lines of the ten newest logs under /vcpkg and /build before
+exiting with the original failure status. This exposes dependency diagnostics in
+Actions without needing access to the discarded container. A successful Linux
+compile still requires a separately approved manual build.
