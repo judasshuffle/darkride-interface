@@ -54,3 +54,21 @@
          SHA512 07d7776551aa78cb09a3ef088a8dee7762735c168c243053b262083d90a1d258cec66dc386f6903da5c4461921a3c2db157a1ee106a2b47e7756cb424b66cc43
          FILENAME webrtc-20190626-linux.tar.gz
      )
+--- a/cmake/ports/tbb/portfile.cmake
++++ b/cmake/ports/tbb/portfile.cmake
+@@ -133,4 +133,15 @@
+ )
+ 
++# The pinned TBB config expects debug archives even with release-only vcpkg.
++# For release-only triplets, reuse each real release archive for the debug
++# imported location. Leave normal (dual-config) builds untouched.
++if(VCPKG_BUILD_TYPE STREQUAL "release")
++    set(_before_tbb_config "${_contents}")
++    string(REGEX REPLACE "set\\(_tbb_debug_lib [^\\n]*\\)"
++        "set(_tbb_debug_lib \"\${_tbb_release_lib}\")" _contents "${_contents}")
++    if(_contents STREQUAL _before_tbb_config)
++        message(FATAL_ERROR "TBB debug import substitution did not match")
++    endif()
++endif()
+ string(REPLACE "SHARED IMPORTED)" "UNKNOWN IMPORTED)" _contents "${_contents}")
+ file(WRITE ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake "${_contents}")
